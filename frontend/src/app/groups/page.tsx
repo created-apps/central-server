@@ -39,12 +39,12 @@ export default function GroupsPage() {
       .sort((a, b) => (sort === "newest" ? 1 : -1) * (+new Date(b.created_at) - +new Date(a.created_at)));
   }, [cases, filter, query, sort]);
 
-  if (error) return <p className="rounded-lg border border-line bg-card p-4 text-sm">{error.message || "Could not load the groups."}</p>;
+  if (error) return <p className="rounded-3xl bg-card p-5 text-sm">{error.message || "Could not load the groups."}</p>;
 
   return (
     <div>
       <div className="mb-5">
-        <h1 className="text-2xl font-semibold tracking-tight">Groups</h1>
+        <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Groups</h1>
         <p className="mt-1 text-sm text-muted">WhatsApp groups created for students and the follow-up actions the team owns.</p>
       </div>
 
@@ -54,7 +54,7 @@ export default function GroupsPage() {
             key={t.key}
             onClick={() => setFilter(t.key)}
             aria-pressed={filter === t.key}
-            className={`rounded-lg border bg-card px-3 py-2 text-left ${filter === t.key ? "border-accent" : "border-line"}`}
+            className={`rounded-3xl bg-card px-4 py-3.5 text-left shadow-[0_1px_2px_rgba(16,24,20,0.04)] ${filter === t.key ? "border-accent" : "border-line"}`}
           >
             <p className="text-xl font-semibold">{isLoading ? "–" : t.count(cases)}</p>
             <p className="flex items-center gap-1.5 text-xs text-muted">
@@ -70,22 +70,22 @@ export default function GroupsPage() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search student, project, mentor or group"
-          className="flex-1 rounded-lg border border-line bg-card px-3 py-2 text-sm outline-none focus:border-accent"
+          className="flex-1 rounded-full border border-line bg-card px-4 py-2 text-sm outline-none focus:border-accent"
         />
-        <select value={filter} onChange={(e) => setFilter(e.target.value as Filter)} className="rounded-lg border border-line bg-card px-3 py-2 text-sm">
+        <select value={filter} onChange={(e) => setFilter(e.target.value as Filter)} className="rounded-full border border-line bg-card px-3.5 py-2 text-sm">
           {CHIPS.map((c) => (
             <option key={c} value={c}>
               {c === "ALL" ? "Any stage" : STAGE_LABELS[c]}
             </option>
           ))}
         </select>
-        <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} className="rounded-lg border border-line bg-card px-3 py-2 text-sm">
+        <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} className="rounded-full border border-line bg-card px-3.5 py-2 text-sm">
           <option value="newest">Newest first</option>
           <option value="oldest">Oldest first</option>
         </select>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-line bg-card">
+      <div className="overflow-hidden rounded-3xl bg-card shadow-[0_1px_2px_rgba(16,24,20,0.04)]">
         {isLoading ? (
           <p className="p-6 text-sm text-muted">Loading…</p>
         ) : rows.length === 0 ? (

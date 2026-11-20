@@ -36,7 +36,7 @@ export function displayName(s: { student_name: string | null; student_email: str
 /** The LLM progress update's statuses. */
 export const PROGRESS: Record<string, { label: string; className: string }> = {
   on_track: { label: "On track", className: "bg-done/15 text-done" },
-  ahead: { label: "Ahead", className: "bg-accent/15 text-accent" },
+  ahead: { label: "Ahead", className: "bg-accent text-on-accent" },
   lagging: { label: "Lagging", className: "bg-amber-500/15 text-amber-700 dark:text-amber-400" },
   not_started: { label: "Not started", className: "bg-soft text-muted" },
   unknown: { label: "Not assessed", className: "bg-soft text-muted" },
@@ -44,8 +44,8 @@ export const PROGRESS: Record<string, { label: string; className: string }> = {
 
 /** COSMIC competition section statuses, in pipeline order. */
 export const SECTION_STATUS: Record<string, { label: string; className: string; bar: string }> = {
-  approved: { label: "Approved", className: "bg-done/15 text-done", bar: "bg-done" },
-  submitted: { label: "Awaiting approval", className: "bg-accent/15 text-accent", bar: "bg-accent" },
+  approved: { label: "Approved", className: "bg-done/15 text-done", bar: "bg-accent" },
+  submitted: { label: "Awaiting approval", className: "bg-sky-500/15 text-sky-700 dark:text-sky-300", bar: "bg-sky-500" },
   changes_required: { label: "Changes required", className: "bg-amber-500/15 text-amber-700 dark:text-amber-400", bar: "bg-amber-500" },
   in_progress: { label: "In progress", className: "bg-violet-500/15 text-violet-700 dark:text-violet-300", bar: "bg-violet-500" },
   not_started: { label: "Not started", className: "bg-soft text-muted", bar: "bg-line" },

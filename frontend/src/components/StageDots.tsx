@@ -10,7 +10,7 @@ export function StageDots({ reached }: { reached: string[] }) {
           key={s.type}
           title={`${s.label}${set.has(s.type) ? "" : s.optional ? " (optional, not booked)" : " (not yet)"}`}
           className={`h-2.5 w-2.5 rounded-full ${
-            set.has(s.type) ? "bg-done" : s.optional ? "border border-dashed border-line" : "bg-line"
+            set.has(s.type) ? "bg-accent" : s.optional ? "border border-dashed border-hatch" : "hatch border border-hatch"
           }`}
         />
       ))}

@@ -104,7 +104,7 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
       .catch((e) => setError(e instanceof ApiError ? e.message : "Could not load"));
   }, [id]);
 
-  if (error) return <p className="rounded-lg border border-line bg-card p-4 text-sm">{error}</p>;
+  if (error) return <p className="rounded-3xl bg-card p-5 text-sm">{error}</p>;
   if (!data) return <p className="text-sm text-muted">Loading…</p>;
 
   const { student: s, milestones, reports, competitions = [] } = data;
@@ -141,10 +141,10 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
 
   return (
     <div className="space-y-5">
-      <Link href="/" className="text-sm text-muted hover:text-fg">← All children</Link>
+      <Link href="/" className="inline-flex items-center gap-1 rounded-full bg-card px-3.5 py-1.5 text-sm text-muted hover:text-fg">← All children</Link>
 
-      <section className="rounded-xl border border-line bg-card p-5">
-        <h1 className="text-2xl font-semibold tracking-tight">{displayName(s)}</h1>
+      <section className="rounded-3xl bg-card p-5 shadow-[0_1px_2px_rgba(16,24,20,0.04)]">
+        <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">{displayName(s)}</h1>
         <p className="mt-1 text-sm text-muted">
           {[s.student_email, s.parent_name && `Parent: ${s.parent_name}`, s.parent_email].filter(Boolean).join(" · ")}
         </p>
@@ -157,7 +157,7 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
           {STAGES.map((st) => (
             <li
               key={st.type}
-              className={`rounded-lg border px-3 py-2 text-xs ${
+              className={`rounded-2xl border px-3 py-2.5 text-xs ${
                 reached.has(st.type) ? "border-done/40 bg-done/10" : st.optional ? "border-dashed border-line text-muted" : "border-line text-muted"
               }`}
             >
@@ -168,7 +168,7 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
         </ol>
       </section>
 
-      <section className="rounded-xl border border-line bg-card p-5">
+      <section className="rounded-3xl bg-card p-5 shadow-[0_1px_2px_rgba(16,24,20,0.04)]">
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="text-base font-semibold">Progress update</h2>
           <ProgressBadge status={s.progress_status} />
@@ -205,7 +205,7 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
       </section>
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        <section className="rounded-xl border border-line bg-card p-5">
+        <section className="rounded-3xl bg-card p-5 shadow-[0_1px_2px_rgba(16,24,20,0.04)]">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="text-base font-semibold">Project &amp; scope</h2>
@@ -215,7 +215,7 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
               </p>
             </div>
             {s.scope_file_path && (
-              <button onClick={openScope} disabled={opening} className="shrink-0 rounded-lg border border-line px-3 py-1.5 text-xs font-medium disabled:opacity-50">
+              <button onClick={openScope} disabled={opening} className="shrink-0 rounded-full border border-accent/70 px-3.5 py-1.5 text-xs font-medium text-accent hover:bg-accent-soft disabled:opacity-50">
                 {opening ? "Opening…" : "Download scope"}
               </button>
             )}
@@ -242,7 +242,7 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
           )}
         </section>
 
-        <section className="rounded-xl border border-line bg-card p-5">
+        <section className="rounded-3xl bg-card p-5 shadow-[0_1px_2px_rgba(16,24,20,0.04)]">
           <h2 className="text-base font-semibold">Progress reports</h2>
           {reports.length ? (
             <ul className="mt-3 divide-y divide-line">
@@ -259,7 +259,7 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
                     <button
                       onClick={() => openReport(r.doc_id)}
                       disabled={openingReport === r.doc_id}
-                      className="rounded-md border border-line px-2.5 py-1 disabled:opacity-50"
+                      className="rounded-full border border-line px-3 py-1 disabled:opacity-50"
                     >
                       {openingReport === r.doc_id ? "Opening…" : "Open PDF"}
                     </button>
@@ -280,7 +280,7 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
 
       <CompetitionsPanel competitions={competitions} suggestions={suggested?.details ?? null} />
 
-      <section className="rounded-xl border border-line bg-card p-5">
+      <section className="rounded-3xl bg-card p-5 shadow-[0_1px_2px_rgba(16,24,20,0.04)]">
         <h2 className="text-base font-semibold">Timeline</h2>
         <ol className="mt-4 space-y-4 border-l border-line pl-5">
           {timeline.map((m) => (

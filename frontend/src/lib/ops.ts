@@ -4,7 +4,7 @@
  * Groups and mentors: the operations side, served by the assessment-automations
  * backend through this app's /api routes. Types, fetchers, hooks and labels.
  */
-import useSWR from "swr";
+import useSWR, { type SWRConfiguration } from "swr";
 
 // ---------------------------------------------------------------- Types
 
@@ -209,7 +209,7 @@ export const ops = {
 
 // ---------------------------------------------------------------- Hooks
 
-export const useCases = () => useSWR("cases", () => request<CaseSummary[]>("/api/cases"));
+export const useCases = (options?: SWRConfiguration) => useSWR("cases", () => request<CaseSummary[]>("/api/cases"), options);
 
 export const useCase = (id: string) =>
   useSWR(["case", id], async () => {
@@ -257,7 +257,7 @@ export const STAGE_LABELS: Record<Stage, string> = {
 export const STAGE_STYLES: Record<Stage, { badge: string; dot: string }> = {
   AWAITING_JOIN: { badge: "bg-slate-500/10 text-slate-700 dark:text-slate-300", dot: "bg-slate-400" },
   NEW: { badge: "bg-amber-500/15 text-amber-700 dark:text-amber-400", dot: "bg-amber-500" },
-  IN_PROGRESS: { badge: "bg-accent/15 text-accent", dot: "bg-accent" },
+  IN_PROGRESS: { badge: "bg-sky-500/15 text-sky-700 dark:text-sky-300", dot: "bg-sky-500" },
   AWAITING_MENTOR_JOIN: { badge: "bg-violet-500/15 text-violet-700 dark:text-violet-300", dot: "bg-violet-500" },
   MENTOR_ASSIGNED: { badge: "bg-done/15 text-done", dot: "bg-done" },
   ABANDONED: { badge: "bg-soft text-muted", dot: "bg-line" },

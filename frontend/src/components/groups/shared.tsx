@@ -23,7 +23,7 @@ export function StoppedBadge() {
 /** The exact WhatsApp message, as an outgoing chat bubble. */
 export function WhatsappPreview({ message, groupName }: { message: string; groupName?: string }) {
   return (
-    <div className="rounded-lg border border-line bg-[#e6ddd4] p-3 dark:bg-[#0b141a]">
+    <div className="rounded-2xl border border-line bg-[#e6ddd4] p-3 dark:bg-[#0b141a]">
       {groupName && <p className="mb-2 truncate text-center text-[11px] font-medium text-black/50 dark:text-white/50">{groupName}</p>}
       <div className="flex justify-end">
         <div className="max-w-[85%] rounded-lg rounded-tr-sm bg-[#d9fdd3] px-2.5 py-1.5 text-sm text-[#111b21] shadow-sm dark:bg-[#005c4b] dark:text-[#e9edef]">
@@ -41,7 +41,7 @@ export function Preview({ message, error, groupName, note }: { message: string |
       {error ? (
         <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
       ) : message == null ? (
-        <p className="rounded-lg border border-dashed border-line p-4 text-center text-sm text-muted">Loading preview…</p>
+        <p className="rounded-2xl border border-dashed border-line p-4 text-center text-sm text-muted">Loading preview…</p>
       ) : (
         <WhatsappPreview message={message} groupName={groupName} />
       )}
@@ -126,7 +126,7 @@ export function StopOperationsButton({ groupCase, onDone, label = "Stop operatio
           </>
         }
       >
-        <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-3">
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/5 p-3">
           <p className="text-xs font-medium text-red-600 dark:text-red-400">What stops</p>
           <ul className="mt-1.5 space-y-1 text-sm text-muted">
             {HALTS.map((h) => (

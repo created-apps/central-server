@@ -49,7 +49,7 @@ function VariantsField({ rows, onChange }: { rows: VariantRow[]; onChange: (r: V
       </p>
       <div className="mt-2 space-y-2">
         {rows.map((row, i) => (
-          <div key={row.id} className="space-y-2 rounded-lg border border-line p-3">
+          <div key={row.id} className="space-y-2 rounded-2xl border border-line p-3.5">
             <div className="flex gap-2">
               <input
                 value={row.label}
@@ -255,13 +255,13 @@ export default function MentorsPage() {
     return (mentors ?? []).filter((m) => !q || m.name.toLowerCase().includes(q) || m.intro.toLowerCase().includes(q));
   }, [mentors, query]);
 
-  if (error) return <p className="rounded-lg border border-line bg-card p-4 text-sm">{error.message || "Could not load the mentors."}</p>;
+  if (error) return <p className="rounded-3xl bg-card p-5 text-sm">{error.message || "Could not load the mentors."}</p>;
 
   return (
     <div>
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Mentors</h1>
+          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Mentors</h1>
           <p className="mt-1 text-sm text-muted">
             {mentors ? `${mentors.length} mentors. ` : ""}The roster used when introducing groups. Each introduction is sent verbatim over WhatsApp.
           </p>
@@ -274,7 +274,7 @@ export default function MentorsPage() {
       </div>
 
       {missingEmail.length > 0 && (
-        <p className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-muted">
+        <p className="mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-muted">
           <span className="font-medium text-fg">
             {missingEmail.length} mentor{missingEmail.length === 1 ? " has" : "s have"} no email
           </span>{" "}
@@ -286,19 +286,19 @@ export default function MentorsPage() {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search mentors"
-        className="mb-4 w-full rounded-lg border border-line bg-card px-3 py-2 text-sm outline-none focus:border-accent sm:max-w-sm"
+        className="mb-4 w-full rounded-full border border-line bg-card px-4 py-2 text-sm outline-none focus:border-accent sm:max-w-sm"
       />
 
       {isLoading ? (
         <p className="text-sm text-muted">Loading…</p>
       ) : filtered.length === 0 ? (
-        <p className="rounded-xl border border-line bg-card p-6 text-sm text-muted">{query ? `No mentors match “${query}”.` : "No mentors yet."}</p>
+        <p className="rounded-3xl bg-card shadow-[0_1px_2px_rgba(16,24,20,0.04)] p-6 text-sm text-muted">{query ? `No mentors match “${query}”.` : "No mentors yet."}</p>
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {filtered.map((m) => {
             const variants = m.variants ? Object.keys(m.variants) : [];
             return (
-              <li key={m.name} className="flex flex-col rounded-xl border border-line bg-card p-4">
+              <li key={m.name} className="flex flex-col rounded-3xl bg-card p-5 shadow-[0_1px_2px_rgba(16,24,20,0.04)]">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="font-medium">{m.name}</p>

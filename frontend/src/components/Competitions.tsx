@@ -41,9 +41,9 @@ function Legend({ counts }: { counts: Counts }) {
 
 function Stat({ label, value, tone }: { label: string; value: React.ReactNode; tone?: "bad" }) {
   return (
-    <div>
+    <div className="rounded-2xl bg-soft px-3.5 py-3">
       <dt className="text-xs text-muted">{label}</dt>
-      <dd className={`text-lg font-semibold ${tone === "bad" ? "text-red-600 dark:text-red-400" : ""}`}>{value}</dd>
+      <dd className={`mt-0.5 text-xl font-semibold tabular-nums ${tone === "bad" ? "text-red-600 dark:text-red-400" : ""}`}>{value}</dd>
     </div>
   );
 }
@@ -133,7 +133,7 @@ function CompetitionCard({ c }: { c: CompetitionRow }) {
   }
 
   return (
-    <li className={`rounded-lg border border-line p-4 ${c.withdrawn ? "opacity-70" : ""}`}>
+    <li className={`rounded-2xl border border-line p-4 ${c.withdrawn ? "opacity-70" : ""}`}>
       <button onClick={() => setOpen((v) => !v)} className="w-full text-left" aria-expanded={open}>
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
@@ -287,8 +287,8 @@ export function CompetitionsPanel({
   const sorted = [...active, ...competitions.filter((c) => c.withdrawn)];
 
   return (
-    <section className="rounded-xl border border-line bg-card p-5">
-      <h2 className="text-base font-semibold">Competitions</h2>
+    <section className="rounded-3xl bg-card p-5 shadow-[0_1px_2px_rgba(16,24,20,0.04)]">
+      <h2 className="text-base font-semibold tracking-tight">Competitions</h2>
       {competitions.length ? (
         <>
           <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-6">
@@ -325,7 +325,7 @@ export function CompetitionStatsStrip({ stats }: { stats: CompetitionStats | nul
   if (!stats) return null;
   if (!stats.available) {
     return (
-      <p className="mb-4 rounded-lg border border-dashed border-line bg-card px-4 py-3 text-sm text-muted">
+      <p className="rounded-3xl border border-dashed border-line bg-card px-5 py-4 text-sm text-muted">
         Competition stats appear after the competitions table is created (run supabase/schema.sql) and the next sync.
       </p>
     );
@@ -334,15 +334,15 @@ export function CompetitionStatsStrip({ stats }: { stats: CompetitionStats | nul
   const rows = stats.byCompetition ?? [];
   const shown = showAll ? rows : rows.slice(0, 6);
   return (
-    <section className="mb-4 rounded-xl border border-line bg-card p-4">
+    <section className="rounded-3xl bg-card p-5 shadow-[0_1px_2px_rgba(16,24,20,0.04)]">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-sm font-semibold">Competitions</h2>
+        <h2 className="text-base font-semibold tracking-tight">Competitions</h2>
         <p className="text-xs text-muted">
           {stats.entries} entries · {stats.children} children · {stats.withdrawn} withdrawn · {stats.outcomes} outcomes ·{" "}
           {stats.resubmissionRequests} resubmission and {stats.swapRequests} swap requests
         </p>
       </div>
-      <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-6">
+      <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         <Stat label="Required approved" value={stats.completion == null ? "—" : `${stats.completion}%`} />
         <Stat label="Sections approved" value={s.approved} />
         <Stat label="Awaiting approval" value={s.submitted} />
@@ -354,8 +354,8 @@ export function CompetitionStatsStrip({ stats }: { stats: CompetitionStats | nul
           tone={s.past_due ? "bad" : undefined}
         />
       </dl>
-      <div className="mt-3">
-        <StatusBar counts={s} />
+      <div className="mt-4">
+        <StatusBar counts={s} className="h-2.5" />
       </div>
 
       {rows.length > 0 && (
@@ -363,7 +363,7 @@ export function CompetitionStatsStrip({ stats }: { stats: CompetitionStats | nul
           <table className="w-full min-w-[640px] text-left text-sm">
             <thead className="text-xs text-muted">
               <tr className="border-b border-line">
-                <th className="py-1.5 pr-3 font-medium">Competition</th>
+                <th className="py-2 pr-3 font-medium">Competition</th>
                 <th className="px-2 font-medium text-right">Children</th>
                 <th className="px-2 font-medium text-right">Approved</th>
                 <th className="px-2 font-medium text-right">Awaiting</th>
@@ -377,7 +377,7 @@ export function CompetitionStatsStrip({ stats }: { stats: CompetitionStats | nul
             <tbody className="divide-y divide-line">
               {shown.map((r) => (
                 <tr key={r.name}>
-                  <td className="max-w-[18rem] truncate py-1.5 pr-3" title={r.name}>{r.name}</td>
+                  <td className="max-w-[18rem] truncate py-2.5 pr-3 font-medium" title={r.name}>{r.name}</td>
                   <td className="px-2 text-right tabular-nums">{r.children}</td>
                   <td className="px-2 text-right tabular-nums">{r.completion == null ? "—" : `${r.completion}%`}</td>
                   <td className="px-2 text-right tabular-nums">{r.submitted}</td>

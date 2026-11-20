@@ -34,7 +34,7 @@ const ACTIONS: { id: Exclude<ActionId, null>; label: string; description: string
 ];
 
 const Card = ({ title, right, children }: { title: React.ReactNode; right?: React.ReactNode; children: React.ReactNode }) => (
-  <section className="rounded-xl border border-line bg-card p-5">
+  <section className="rounded-3xl bg-card p-5 shadow-[0_1px_2px_rgba(16,24,20,0.04)]">
     <div className="flex items-center justify-between gap-2">
       <h2 className="text-base font-semibold">{title}</h2>
       {right}
@@ -61,7 +61,7 @@ function ActionsPanel({ groupCase, onDone }: { groupCase: GroupCase; onDone: () 
             onClick={() => setActive(a.id)}
             disabled={!canSend}
             title={canSend ? undefined : stopped ? "Operations are stopped for this project" : "Read-only access — ask an admin to send this"}
-            className="rounded-lg border border-line p-3 text-left hover:bg-soft disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+            className="rounded-2xl border border-line p-3.5 text-left hover:border-accent/50 hover:bg-accent-soft/50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
           >
             <p className="text-sm font-medium">{a.label}</p>
             <p className="text-xs text-muted">{a.description}</p>
@@ -138,7 +138,7 @@ function QueuePanel({ groupCase, version }: { groupCase: GroupCase; version: num
       </p>
       <ol className="mt-3 space-y-2">
         {items.map((item, i) => (
-          <li key={item.id} className="flex items-start justify-between gap-2 rounded-lg border border-line px-3 py-2">
+          <li key={item.id} className="flex items-start justify-between gap-2 rounded-2xl border border-line px-3.5 py-2.5">
             <div>
               <p className="text-sm font-medium">
                 {i + 1}. {ACTION_LABELS[item.kind] ?? item.kind}
@@ -287,7 +287,7 @@ function Contacts({ groupCase, onDone }: { groupCase: GroupCase; onDone: () => v
               {c.name ?? "Unknown"} <span className="text-xs font-normal text-muted">· {c.label}</span>
             </p>
             {c.phone ? (
-              <div className="flex items-center justify-between rounded-md bg-soft px-2.5 py-1.5 text-sm tabular-nums">
+              <div className="flex items-center justify-between rounded-xl bg-soft px-3 py-2 text-sm tabular-nums">
                 {formatPhone(c.phone)}
                 <span className="flex items-center">
                   {isAdmin && (
@@ -306,7 +306,7 @@ function Contacts({ groupCase, onDone }: { groupCase: GroupCase; onDone: () => v
               )
             )}
             {c.email && (
-              <div className="flex items-center justify-between gap-2 rounded-md bg-soft px-2.5 py-1.5 text-sm">
+              <div className="flex items-center justify-between gap-2 rounded-xl bg-soft px-3 py-2 text-sm">
                 <span className="truncate">{c.email}</span>
                 <CopyButton value={c.email} label="email" />
               </div>
@@ -330,13 +330,13 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
     setVersion((v) => v + 1);
   };
 
-  if (error) return <p className="rounded-lg border border-line bg-card p-4 text-sm">{error.message || "Could not load the group."}</p>;
+  if (error) return <p className="rounded-3xl bg-card p-5 text-sm">{error.message || "Could not load the group."}</p>;
   if (isLoading) return <p className="text-sm text-muted">Loading…</p>;
   if (!groupCase) {
     return (
       <div className="space-y-3">
-        <Link href="/groups" className="text-sm text-muted hover:text-fg">← All groups</Link>
-        <p className="rounded-lg border border-line bg-card p-4 text-sm">This group doesn&apos;t exist or may have been removed.</p>
+        <Link href="/groups" className="inline-flex items-center gap-1 rounded-full bg-card px-3.5 py-1.5 text-sm text-muted hover:text-fg">← All groups</Link>
+        <p className="rounded-3xl bg-card p-5 text-sm">This group doesn&apos;t exist or may have been removed.</p>
       </div>
     );
   }
@@ -349,12 +349,12 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
 
   return (
     <div className="space-y-5">
-      <Link href="/groups" className="text-sm text-muted hover:text-fg">← All groups</Link>
+      <Link href="/groups" className="inline-flex items-center gap-1 rounded-full bg-card px-3.5 py-1.5 text-sm text-muted hover:text-fg">← All groups</Link>
 
-      <section className="rounded-xl border border-line bg-card p-5">
+      <section className="rounded-3xl bg-card p-5 shadow-[0_1px_2px_rgba(16,24,20,0.04)]">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">{groupCase.group_name}</h1>
+            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">{groupCase.group_name}</h1>
             <p className="mt-1 text-sm text-muted">
               {groupCase.student_name}
               {groupCase.mentor_name ? ` · Mentor: ${groupCase.mentor_name}` : ""}

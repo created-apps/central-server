@@ -342,7 +342,7 @@ export function MentorDialog({ groupCase, mentors, open, onClose, onDone }: Prop
         {mentor && chosen ? (
           <WhatsappPreview message={message} groupName={groupCase.group_name} />
         ) : (
-          <p className="rounded-lg border border-dashed border-line p-4 text-center text-sm text-muted">
+          <p className="rounded-2xl border border-dashed border-line p-4 text-center text-sm text-muted">
             {mentor ? "Pick an introduction to preview it." : "Select a mentor to preview the introduction."}
           </p>
         )}
@@ -433,7 +433,7 @@ export function ProjectSetupDialog({ groupCase, open, onClose, onDone }: Props) 
       }
     >
       {!mentorAssigned && (
-        <p className="rounded-lg border border-dashed border-line p-3 text-sm text-muted">
+        <p className="rounded-2xl border border-dashed border-line p-3 text-sm text-muted">
           No mentor is assigned yet. Saving now still renames the WhatsApp group and sets its description. The Drive folder, SYNC link and COSMIC
           project follow once a mentor has been introduced.
         </p>
@@ -453,7 +453,7 @@ export function ProjectSetupDialog({ groupCase, open, onClose, onDone }: Props) 
         </select>
       </Field>
       {submitted && setup && (
-        <div className="space-y-2 rounded-lg border border-line p-3 text-sm">
+        <div className="space-y-2 rounded-2xl border border-line p-3.5 text-sm">
           <div className="flex items-center justify-between gap-2">
             <span className="font-medium">Setup status</span>
             <Badge className={setup.status === "FAILED" ? STEP_STYLE.FAILED : setup.status === "DONE" ? STEP_STYLE.OK : STEP_STYLE.PENDING}>{setup.status}</Badge>

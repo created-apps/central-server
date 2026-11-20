@@ -1,26 +1,41 @@
 @import "tailwindcss";
 
+/*
+ * Light, airy surfaces with a deep-green brand. Cards are white and very
+ * rounded on a soft grey canvas; green carries every primary action and the
+ * one highlighted figure on each screen.
+ */
 :root {
-  --bg: #f6f6f4;
+  --bg: #f3f4f1;
   --card: #ffffff;
-  --fg: #1b1b1a;
-  --muted: #6b6b66;
-  --line: #e4e4df;
-  --accent: #1f6feb;
-  --done: #1a7f37;
-  --soft: #f0f0ec;
+  --fg: #111613;
+  --muted: #6e766f;
+  --line: #e8ebe6;
+  --soft: #f3f5f1;
+  /* Brand green: buttons, active nav, highlighted figures. */
+  --accent: #1e5e3b;
+  --accent-strong: #123d26;
+  --accent-soft: #e4efe7;
+  --on-accent: #ffffff;
+  /* Status green, lighter than the brand. */
+  --done: #2f8a55;
+  --hatch: #c6cdc7;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #121211;
-    --card: #1b1b1a;
-    --fg: #ececea;
-    --muted: #9b9b95;
-    --line: #2d2d2a;
-    --accent: #58a6ff;
-    --done: #3fb950;
-    --soft: #242422;
+    --bg: #0e110f;
+    --card: #171b18;
+    --fg: #ebefeb;
+    --muted: #919a93;
+    --line: #262c27;
+    --soft: #1e2420;
+    --accent: #3f9c66;
+    --accent-strong: #2a7a4c;
+    --accent-soft: #1d3326;
+    --on-accent: #ffffff;
+    --done: #4cbc7c;
+    --hatch: #39413b;
   }
 }
 
@@ -30,9 +45,13 @@
   --color-fg: var(--fg);
   --color-muted: var(--muted);
   --color-line: var(--line);
-  --color-accent: var(--accent);
-  --color-done: var(--done);
   --color-soft: var(--soft);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-done: var(--done);
+  --color-hatch: var(--hatch);
   --font-sans: var(--font-geist-sans);
 }
 
@@ -40,4 +59,21 @@ body {
   background: var(--bg);
   color: var(--fg);
   font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* Diagonal stripes for "nothing yet" / pending shares in charts. */
+.hatch {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--hatch) 0 3px,
+    transparent 3px 8px
+  );
+}
+
+/* The highlighted stat card: brand green with a soft glow at the top. */
+.hero-card {
+  background:
+    radial-gradient(120% 90% at 20% 0%, color-mix(in oklab, var(--accent) 55%, #6fcf97) 0%, transparent 60%),
+    linear-gradient(160deg, var(--accent) 0%, var(--accent-strong) 100%);
+  color: var(--on-accent);
 }
