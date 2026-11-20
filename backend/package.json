@@ -10,6 +10,9 @@
     "sync": "tsx src/scripts/runSync.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.11.0",
     "@supabase/supabase-js": "^2.49.1",

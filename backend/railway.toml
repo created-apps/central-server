@@ -1,0 +1,21 @@
+# Railway deployment for the milestones tracker backend.
+#
+# One process serves the API (called by the frontend's server routes) and runs
+# the hourly sync cron, so the service must stay awake: don't put it behind
+# serverless or sleep settings. Railway sets PORT; the app listens on it.
+
+[build]
+builder = "NIXPACKS"
+buildCommand = "npm run build"
+
+[deploy]
+startCommand = "npm run start"
+# No migration step: run supabase/schema.sql once in this app's Supabase
+# project (and again after schema changes; it is safe to re-run).
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+# Must stay at 1. node-cron ticks inside every replica, so a second one would
+# run every hourly sync twice, and a sync in flight lives in one process only.
+numReplicas = 1
