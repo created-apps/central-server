@@ -1,0 +1,80 @@
+# CreatED Dashboard (Milestones Tracker)
+
+The central staff dashboard. **Children** lists every child on the enrolment sheet with their programme milestones, competitions, project scope and progress reports. **Groups** and **Mentors** are the WhatsApp operations screens ported from `assessment_automations`.
+
+- **backend/**: Express and TypeScript. An hourly cron reads the enrolment sheet, SYNC, COSMIC and AUTOMATIONS, all read-only, and writes each child's milestones to this app's own Supabase project. It also serves the API.
+- **frontend/**: Next.js. Staff sign in with email and password, using the operations dashboard's accounts (`dashboard_users`). Its server routes call both backends, so no backend credential reaches the browser:
+  - `/api/tracker/*` forwards to this app's backend, with the session token.
+  - `/api/cases/*`, `/api/mentors/*` and `/api/curriculum-subjects` call the assessment-automations backend with `BACKEND_API_SECRET`. That backend is a separate service that sends the WhatsApp messages and runs its own crons.
+- **supabase/schema.sql**: the tables for this app's Supabase project.
+
+Milestone detection mirrors the booking platform's counsellor feed (`booking-platform-clean/backend/app/services/counselor_feed.py`):
+
+- enrolled
+- first consult done
+- scope call with the SRM
+- project confirmed
+- scope approved
+- competitions suggested
+- competition entered
+- mid-programme review
+- competition outcome
+- closure call
+- progress reports
+
+## Setup
+
+1. **Create the Supabase project.** Make a new project. In its SQL editor, run `supabase/schema.sql`.
+2. **Configure the backend.** In `backend/.env`, set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. `AUTH_SECRET` (which must match the frontend's) and `PORT=4100` are set. These are already filled in: the source credentials, the enrolment sheet's `ENROLLMENT_SHEET_*` values and the Drive service account's `GOOGLE_SA_*` and `GOOGLE_SHARED_DRIVE_ID`.
+3. **Configure the frontend.** `frontend/.env.local` is filled in:
+   - `AUTH_SECRET` signs the session cookie.
+   - `DATABASE_URL` is the operations dashboard's Postgres, holding `dashboard_users`.
+   - `BACKEND_API_URL` and `BACKEND_API_SECRET` reach the assessment-automations backend.
+   - `TRACKER_API_URL` is this app's backend.
+
+   Accounts are created with `pnpm invite:user` in `assessment_automations/frontend`. Roles:
+   - **admin** can send group actions, edit mentors, stop operations and press Refresh now.
+   - **viewer** can read everything.
+
+   Both apps enforce the roles on the server.
+4. **Run both apps.**
+   ```bash
+   cd backend && npm install && npm run dev
+   cd frontend && npm install && npm run dev -- -p 3100
+   ```
+   The first sync runs at the next scheduled time. To run it sooner, press **Refresh now** on the dashboard or run `npm run sync` in `backend/`.
+
+To read the sources without writing anything, run `npm run sync -- --dry-run`. Add `--assess 2` to also run the progress update for two children.
+
+## Configuration (backend)
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `SYNC_CRON` | `5 * * * *` | When the sync runs (hourly, at minute 5) |
+| `SYNC_CRON_ENABLED` | `true` | `false` turns the schedule off; manual refresh still works |
+| `SYNC_CONCURRENCY` | `6` | Children read in parallel |
+| `AUTH_SECRET` | | Verifies sign-in sessions; must match the frontend's |
+| `ANTHROPIC_API_KEY` | | Turns on the LLM progress update |
+| `CLAUDE_PROGRESS_MODEL` | `claude-sonnet-5-5` | Model for the progress update |
+| `PORT` | `4100` | API port. The assessment-automations backend uses 4000 |
+| `CORS_ORIGINS` | `http://localhost:3000` | Frontend origin(s) |
+
+## Notes
+
+- **Source access is read-only.** The app never writes to SYNC, COSMIC, AUTOMATIONS or the sheet.
+- **Children who leave the sheet** are hidden from the list. Their history is kept.
+- **Scope downloads** use a fresh one-hour signed link from COSMIC's private bucket, created when you click.
+- **Progress reports** open as PDFs. The backend exports each Google Doc using the Drive service account (`GOOGLE_SA_CLIENT_EMAIL`, `GOOGLE_SA_PRIVATE_KEY`). Viewers therefore don't need Drive access. Only Docs in `GOOGLE_SHARED_DRIVE_ID`, and only reports recorded against that child, can be exported. A one-line private key is also accepted.
+- **Progress update (LLM):** every child with completed sessions gets a status from Claude (on track, ahead or lagging), with a headline, a reason and their recent work. Children with no completed sessions show "Not started". The model reads the child's SYNC sessions and session summaries, plus the COSMIC project dates. The prompt and logic are a port of the booking platform's `student_progress.py`, and it uses the same `CLAUDE_PROGRESS_MODEL` (default `claude-sonnet-5-5`). Claude is only asked again when a child's sessions or summaries change, so a sync with no changes makes no calls. The first sync assesses everyone (about 226 children). Server-side refusal fallbacks are on. Without `ANTHROPIC_API_KEY` the update is skipped.
+- **Competitions:** each child page has a Competitions panel. It lists every COSMIC competition enrollment, withdrawn ones included, with its sections (the template's requirements) and the status of each. The statuses come from COSMIC: approved, awaiting approval (`submitted`), changes required, in progress or not started. The panel also shows deadlines, reviewer feedback and review history, outcomes, resubmission requests, and the approved matcher suggestions with any swap requests. A section is past due when it is not approved and its internal deadline has passed. The child's answer text is never read. The dashboard shows a stats strip across all children, with a breakdown per competition. On an existing database, run `supabase/schema.sql` again to create the `competitions` table. Until you do, the sync skips competitions and the dashboard says so.
+- **Enrolment date:** the sheet has no date column, so "Enrolled" shows no date.
+- **Ports for local development:**
+
+  | Service | Port |
+  |---|---|
+  | This backend | 4100 |
+  | Assessment-automations backend | 4000 |
+  | The old operations dashboard (still running for now) | 3000 |
+  | This frontend | 3100 |
+
+  The old dashboard and this one share the same accounts, but each has its own session cookie.
