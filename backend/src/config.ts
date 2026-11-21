@@ -18,6 +18,9 @@ export const config = {
   // Verifies the session token the frontend signs at login. Must match the
   // frontend's AUTH_SECRET.
   authSecret: process.env.AUTH_SECRET ?? "",
+  // Lets other services call POST /api/milestones/evaluate with the
+  // X-API-Key header. Empty turns header access off.
+  milestoneApiKey: (process.env.MILESTONE_API_KEY ?? "").trim(),
 
   // The three source projects. Read-only.
   sync: { url: process.env.SYNC_SUPABASE_URL ?? "", key: process.env.SYNC_SERVICE_ROLE_KEY ?? "" },

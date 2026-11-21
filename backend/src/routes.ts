@@ -1,12 +1,30 @@
+import Anthropic from "@anthropic-ai/sdk";
 import { Router } from "express";
 import { config } from "./config.js";
 import { db } from "./db.js";
-import { requireAdmin, requireStaff, type AuthedRequest } from "./auth.js";
+import { requireAdmin, requireApiKeyOrStaff, requireStaff, type AuthedRequest } from "./auth.js";
 import { getScopeDownloadUrl } from "./sources/cosmic.js";
 import { DriveExportError, exportReportPdf, pdfFilename } from "./sources/drive.js";
 import { runSync, syncInProgress } from "./syncJob.js";
+import { checkMilestones, MilestoneCheckError, parseCheckRequest } from "./milestoneCheck.js";
 
 export const api = Router();
+/**
+ * LLM milestone check: which of the given milestones has the child completed,
+ * judged against their scope and progress reports. Nothing is stored.
+ * Registered before requireStaff so other services can call it with the
+ * X-API-Key header (MILESTONE_API_KEY) instead of a staff session.
+ */
+api.post("/milestones/evaluate", requireApiKeyOrStaff, async (req, res, next) => {
+  try {
+    res.json(await checkMilestones(parseCheckRequest(req.body)));
+  } catch (err) {
+    if (err instanceof MilestoneCheckError) return res.status(err.status).json({ error: err.message });
+    if (err instanceof Anthropic.APIError) return res.status(502).json({ error: `Claude API error ${err.status}` });
+    next(err);
+  }
+});
+
 api.use(requireStaff);
 
 /** Reads every row of a query past Supabase's 1000-row page cap. */
@@ -186,3 +204,4 @@ api.post("/sync", requireAdmin, (_req, res) => {
   runSync("manual").catch((err) => console.error("Manual sync failed:", err));
   res.status(202).json({ started: !alreadyRunning, running: true });
 });
+

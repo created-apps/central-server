@@ -4,6 +4,7 @@
  * Accounts and roles live in the operations dashboard's dashboard_users.
  */
 import type { NextFunction, Request, Response } from "express";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { jwtVerify } from "jose";
 import { config } from "./config.js";
 
@@ -36,5 +37,23 @@ export async function requireStaff(req: AuthedRequest, res: Response, next: Next
 /** Admin-only actions, such as starting a sync. */
 export function requireAdmin(req: AuthedRequest, res: Response, next: NextFunction) {
   if (req.userRole !== "admin") return res.status(403).json({ error: "Read-only access — ask an admin to do this" });
+  next();
+}
+
+const digest = (v: string) => createHash("sha256").update(v).digest();
+
+/**
+ * Service-to-service access: the X-API-Key header must equal MILESTONE_API_KEY.
+ * Without the header, falls back to the staff session. Used only on the
+ * endpoints that opt in.
+ */
+export function requireApiKeyOrStaff(req: AuthedRequest, res: Response, next: NextFunction) {
+  const given = req.header("x-api-key");
+  if (given === undefined) return requireStaff(req, res, next);
+  if (!config.milestoneApiKey) return res.status(503).json({ error: "MILESTONE_API_KEY is not set on the tracker backend" });
+  if (!timingSafeEqual(digest(given), digest(config.milestoneApiKey))) return res.status(401).json({ error: "Invalid API key" });
+  req.userEmail = "api-key";
+  req.userName = "API key";
+  req.userRole = "viewer";
   next();
 }

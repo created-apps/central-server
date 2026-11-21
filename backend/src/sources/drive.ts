@@ -50,7 +50,8 @@ async function token(): Promise<string> {
   return token;
 }
 
-export async function exportReportPdf(docId: string): Promise<{ name: string; pdf: Buffer }> {
+/** Checks the Doc is a Google Doc in the Shared Drive, then exports it as `mimeType`. */
+async function exportDoc(docId: string, mimeType: string, timeoutMs: number): Promise<{ name: string; body: Buffer }> {
   if (!driveConfigured()) throw new DriveExportError("Drive export is not configured", 503);
   if (!/^[A-Za-z0-9_-]{20,}$/.test(docId)) throw new DriveExportError("Invalid document id", 400);
   const headers = { Authorization: `Bearer ${await token()}` };
@@ -65,14 +66,25 @@ export async function exportReportPdf(docId: string): Promise<{ name: string; pd
   if (meta.driveId !== config.googleSharedDriveId) throw new DriveExportError("Report is not in the shared drive", 403);
   if (meta.mimeType !== DOC_MIME) throw new DriveExportError("Report is not a Google Doc", 415);
 
-  const pdfRes = await fetch(`https://www.googleapis.com/drive/v3/files/${docId}/export?mimeType=application/pdf`, {
-    headers,
-    signal: AbortSignal.timeout(60_000),
-  });
-  if (!pdfRes.ok) throw new DriveExportError(`Drive export returned ${pdfRes.status}`);
-  const pdf = Buffer.from(await pdfRes.arrayBuffer());
-  if (pdf.length > MAX_BYTES) throw new DriveExportError("Report is too large to export");
-  return { name: meta.name ?? "progress-report", pdf };
+  const exportRes = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${docId}/export?mimeType=${encodeURIComponent(mimeType)}`,
+    { headers, signal: AbortSignal.timeout(timeoutMs) },
+  );
+  if (!exportRes.ok) throw new DriveExportError(`Drive export returned ${exportRes.status}`);
+  const body = Buffer.from(await exportRes.arrayBuffer());
+  if (body.length > MAX_BYTES) throw new DriveExportError("Report is too large to export");
+  return { name: meta.name ?? "progress-report", body };
+}
+
+export async function exportReportPdf(docId: string): Promise<{ name: string; pdf: Buffer }> {
+  const { name, body } = await exportDoc(docId, "application/pdf", 60_000);
+  return { name, pdf: body };
+}
+
+/** The report's text, for the LLM milestone check. */
+export async function exportReportText(docId: string): Promise<{ name: string; text: string }> {
+  const { name, body } = await exportDoc(docId, "text/plain", 30_000);
+  return { name, text: body.toString("utf8").replace(/^\uFEFF/, "").trim() };
 }
 
 /** A safe download filename from the Doc's title. */
