@@ -7,6 +7,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { config } from "./config.js";
 import { db } from "./db.js";
 import { driveConfigured, exportReportText } from "./sources/drive.js";
+import { findStudentByEmail, normaliseEmail } from "./studentLookup.js";
 
 export const MILESTONE_STATUSES = ["completed", "in_progress", "not_started", "unclear"] as const;
 export const CONFIDENCE = ["high", "medium", "low"] as const;
@@ -36,9 +37,8 @@ export interface CheckRequest {
 /** Validates the request body. Milestones may be strings or {id?, title, description?}. */
 export function parseCheckRequest(body: unknown): CheckRequest {
   const b = (body ?? {}) as Record<string, unknown>;
-  const email = typeof b.student_email === "string" ? b.student_email.trim().toLowerCase() : "";
-  // Strict: the email goes into a PostgREST or() filter.
-  if (!/^[a-z0-9._%+'-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(email)) throw new MilestoneCheckError("A valid student_email is required");
+  const email = normaliseEmail(b.student_email);
+  if (!email) throw new MilestoneCheckError("A valid student_email is required");
   if (!Array.isArray(b.milestones) || b.milestones.length === 0) {
     throw new MilestoneCheckError("milestones must be a non-empty array");
   }
@@ -141,7 +141,8 @@ async function loadReports(studentId: string): Promise<ReportText[]> {
   );
 }
 
-function buildPrompt(student: Record<string, any>, reports: ReportText[], milestones: MilestoneInput[]): string {
+/** The scope and progress reports, as the shared start of both prompts. */
+function contextLines(student: Record<string, any>, reports: ReportText[]): string[] {
   const scopeParts = [
     `Project: ${student.project_name || "not recorded"}`,
     `Scope title: ${student.scope_title || "not recorded"}`,
@@ -163,7 +164,12 @@ function buildPrompt(student: Record<string, any>, reports: ReportText[], milest
     lines.push(`<report number="${r.reportNo ?? "?"}" date="${r.reportDate ?? "unknown"}">`, clip(r.text, REPORT_CHARS), "</report>");
   }
   if (!reports.some((r) => r.text)) lines.push("(no progress reports available)");
-  lines.push("</progress_reports>", "", "<milestones>");
+  lines.push("</progress_reports>");
+  return lines;
+}
+
+function buildPrompt(student: Record<string, any>, reports: ReportText[], milestones: MilestoneInput[]): string {
+  const lines = [...contextLines(student, reports), "", "<milestones>"];
   for (const m of milestones) {
     lines.push(`- id: ${JSON.stringify(m.id)}\n  title: ${m.title}${m.description ? `\n  description: ${m.description}` : ""}`);
   }
@@ -173,61 +179,59 @@ function buildPrompt(student: Record<string, any>, reports: ReportText[], milest
 
 let client: Anthropic | null = null;
 
-async function askClaude(prompt: string) {
+async function askClaude<T>(system: string, schema: object, prompt: string): Promise<{ parsed: T; model: string }> {
   client ??= new Anthropic({ apiKey: config.anthropicApiKey });
   const stream = client.beta.messages.stream({
     model: config.progressModel,
     max_tokens: 16000,
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",
-    system: SYSTEM,
+    system,
     messages: [{ role: "user", content: prompt }],
-    output_config: { effort: "medium", format: { type: "json_schema", schema: RESULT_SCHEMA } },
+    output_config: { effort: "medium", format: { type: "json_schema", schema: schema as Record<string, unknown> } },
   });
   const message = await stream.finalMessage();
   if (message.stop_reason === "refusal") throw new MilestoneCheckError("Claude declined the request", 502);
-  if (message.stop_reason === "max_tokens") throw new MilestoneCheckError("Claude output hit max_tokens; send fewer milestones", 502);
+  if (message.stop_reason === "max_tokens") throw new MilestoneCheckError("Claude output hit max_tokens; ask for fewer milestones", 502);
   const text = message.content.find((b) => b.type === "text");
   if (!text || text.type !== "text") throw new MilestoneCheckError("Claude returned no text", 502);
-  return { parsed: JSON.parse(text.text) as { milestones: any[]; overall_summary: string }, model: message.model };
+  return { parsed: JSON.parse(text.text) as T, model: message.model };
 }
 
-export async function checkMilestones(req: CheckRequest) {
-  if (!config.anthropicApiKey) throw new MilestoneCheckError("ANTHROPIC_API_KEY is not set on the tracker backend", 503);
-  const { data: student, error } = await db
-    .from("students")
-    .select("id,student_email,student_name,program,project_name,scope_title,scope_summary,scope_json,scope_approved")
-    .or(`student_email.eq.${req.studentEmail},key.eq.${req.studentEmail}`)
-    .order("in_sheet", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  if (!student) throw new MilestoneCheckError("Student not found", 404);
+const STUDENT_FIELDS =
+  "id,student_email,student_name,program,project_name,scope_title,scope_summary,scope_json,scope_approved";
 
+/** The child, their scope and their readable reports. */
+async function loadContext(email: string) {
+  if (!config.anthropicApiKey) throw new MilestoneCheckError("ANTHROPIC_API_KEY is not set on the tracker backend", 503);
+  const student = await findStudentByEmail(email, STUDENT_FIELDS);
+  if (!student) throw new MilestoneCheckError("Student not found", 404);
   const reports = await loadReports(student.id);
   const hasScope = Boolean(student.scope_title || student.scope_summary || student.scope_json);
-  const readable = reports.filter((r) => r.text);
-  if (!hasScope && !readable.length) {
-    throw new MilestoneCheckError("This student has no scope or readable progress reports to check against", 422);
-  }
+  return { student, reports, hasScope, readable: reports.filter((r) => r.text) };
+}
 
-  const { parsed, model } = await askClaude(buildPrompt(student, reports, req.milestones));
-  const byId = new Map((parsed.milestones ?? []).map((m) => [String(m.id), m]));
-  const results = req.milestones.map((m) => {
-    const r = byId.get(m.id);
-    const status = MILESTONE_STATUSES.includes(r?.status) ? r.status : "unclear";
-    return {
-      id: m.id,
-      title: m.title,
-      status,
-      completed: status === "completed",
-      confidence: CONFIDENCE.includes(r?.confidence) ? r.confidence : "low",
-      evidence: String(r?.evidence ?? ""),
-      source_reports: Array.isArray(r?.source_reports) ? r.source_reports.filter(Number.isInteger) : [],
-    };
-  });
+/** One judged milestone, with unknown or missing values made safe. */
+function judged(r: any) {
+  const status = MILESTONE_STATUSES.includes(r?.status) ? r.status : "unclear";
+  return {
+    status,
+    completed: status === "completed",
+    confidence: CONFIDENCE.includes(r?.confidence) ? r.confidence : "low",
+    evidence: String(r?.evidence ?? ""),
+    source_reports: Array.isArray(r?.source_reports) ? r.source_reports.filter(Number.isInteger) : [],
+  };
+}
+
+/** The response wrapper both endpoints share. */
+function envelope(
+  ctx: Awaited<ReturnType<typeof loadContext>>,
+  model: string,
+  overall: unknown,
+  results: { status: string }[],
+) {
+  const { student, reports, hasScope, readable } = ctx;
   const count = (s: string) => results.filter((r) => r.status === s).length;
-
   return {
     student: { email: student.student_email, name: student.student_name, project_name: student.project_name },
     evaluated_at: new Date().toISOString(),
@@ -244,8 +248,151 @@ export async function checkMilestones(req: CheckRequest) {
       in_progress: count("in_progress"),
       not_started: count("not_started"),
       unclear: count("unclear"),
-      overall: String(parsed.overall_summary ?? ""),
+      overall: String(overall ?? ""),
     },
+  };
+}
+
+export async function checkMilestones(req: CheckRequest) {
+  const ctx = await loadContext(req.studentEmail);
+  if (!ctx.hasScope && !ctx.readable.length) {
+    throw new MilestoneCheckError("This student has no scope or readable progress reports to check against", 422);
+  }
+  const { parsed, model } = await askClaude<{ milestones: any[]; overall_summary: string }>(
+    SYSTEM,
+    RESULT_SCHEMA,
+    buildPrompt(ctx.student, ctx.reports, req.milestones),
+  );
+  const byId = new Map((parsed.milestones ?? []).map((m) => [String(m.id), m]));
+  const results = req.milestones.map((m) => ({ id: m.id, title: m.title, ...judged(byId.get(m.id)) }));
+  return { ...envelope(ctx, model, parsed.overall_summary, results), milestones: results };
+}
+
+// ---------------------------------------------------------------------------
+// Derived milestones: Claude decides the milestones from the scope, then
+// judges each one against the progress reports.
+// ---------------------------------------------------------------------------
+
+export const PROJECT_TYPES = ["hardware", "software", "data_ml", "research", "design", "mixed"] as const;
+export const CATEGORIES = [
+  "research", "planning", "design", "procurement", "hardware_build", "software_build",
+  "data", "modelling", "testing", "analysis", "writing", "presentation", "other",
+] as const;
+
+const DEFAULT_DERIVED = 8;
+const MIN_DERIVED = 3;
+const MAX_DERIVED = 15;
+
+export interface DeriveRequest {
+  studentEmail: string;
+  maxMilestones: number;
+}
+
+/** Validates the body: student_email, and max_milestones (3-15, default 8). */
+export function parseDeriveRequest(body: unknown): DeriveRequest {
+  const b = (body ?? {}) as Record<string, unknown>;
+  const email = normaliseEmail(b.student_email);
+  if (!email) throw new MilestoneCheckError("A valid student_email is required");
+  const raw = b.max_milestones;
+  let max = DEFAULT_DERIVED;
+  if (raw !== undefined && raw !== null && raw !== "") {
+    max = Number(raw);
+    if (!Number.isInteger(max) || max < MIN_DERIVED || max > MAX_DERIVED) {
+      throw new MilestoneCheckError(`max_milestones must be a whole number from ${MIN_DERIVED} to ${MAX_DERIVED}`);
+    }
+  }
+  return { studentEmail: email, maxMilestones: max };
+}
+
+const DERIVE_SYSTEM = `You plan and track the milestones of a school student's project in \
+CreatED's mentored project programme.
+
+You get the student's approved project scope and the text of their progress reports, written \
+by their mentor, oldest first.
+
+Step 1 -- decide the milestones, from the scope only.
+- First classify the project: hardware (circuits, soldering, assembly, mechanical builds), \
+software (apps, websites, games), data_ml (data collection, model training, evaluation), \
+research (literature review, experiments, a paper), design (product, UX or visual design), \
+or mixed.
+- Then list the concrete milestones this project must pass through, in the order they \
+happen, from start to finish. Make them specific to this project, using its own components, \
+tools and deliverables. For example a hardware project might have "Source the sensors and \
+microcontroller", "Solder and assemble the circuit", "Write and flash the firmware"; a data \
+and ML project might have "Collect and label the dataset", "Train the first model", \
+"Evaluate the model against a baseline".
+- Each milestone is one checkable outcome, not a vague activity. Titles at most 10 words; \
+the description says in one sentence what "done" looks like.
+- Include the final deliverables the scope promises (for example a paper, a demo, a \
+presentation or a competition entry).
+- Do not shape the list around what the reports happen to mention; it is the plan the scope implies.
+
+Step 2 -- judge each milestone against the progress reports:
+- completed: the reports clearly state the work for this milestone is done or delivered.
+- in_progress: the reports show work started on it but not finished.
+- not_started: no sign the work has begun, or the reports say it is planned for later.
+- unclear: the reports cannot settle it either way.
+Rules: base the judgement only on the reports; the scope alone is never evidence of work done. \
+Do not assume a milestone is done because a later one is, unless the reports say so. Later \
+reports override earlier ones. confidence is high when a report states it directly, medium \
+when strongly implied, low otherwise. evidence is 1-2 sentences citing the reports (with \
+report numbers), or an empty string when there is none. source_reports lists those report numbers.
+
+Use ids m1, m2, m3 ... in order.`;
+
+const DERIVE_SCHEMA = {
+  type: "object",
+  properties: {
+    project_type: { type: "string", enum: [...PROJECT_TYPES] },
+    milestones: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          title: { type: "string" },
+          description: { type: "string" },
+          category: { type: "string", enum: [...CATEGORIES] },
+          status: { type: "string", enum: [...MILESTONE_STATUSES] },
+          confidence: { type: "string", enum: [...CONFIDENCE] },
+          evidence: { type: "string" },
+          source_reports: { type: "array", items: { type: "integer" } },
+        },
+        required: ["id", "title", "description", "category", "status", "confidence", "evidence", "source_reports"],
+        additionalProperties: false,
+      },
+    },
+    overall_summary: { type: "string" },
+  },
+  required: ["project_type", "milestones", "overall_summary"],
+  additionalProperties: false,
+} as const;
+
+export async function deriveMilestones(req: DeriveRequest) {
+  const ctx = await loadContext(req.studentEmail);
+  if (!ctx.hasScope) throw new MilestoneCheckError("This student has no project scope to decide milestones from", 422);
+  const prompt = [
+    ...contextLines(ctx.student, ctx.reports),
+    "",
+    `Decide between ${Math.min(MIN_DERIVED + 2, req.maxMilestones)} and ${req.maxMilestones} milestones.`,
+  ].join("\n");
+  const { parsed, model } = await askClaude<{ project_type: string; milestones: any[]; overall_summary: string }>(
+    DERIVE_SYSTEM,
+    DERIVE_SCHEMA,
+    prompt,
+  );
+  const results = (parsed.milestones ?? []).slice(0, req.maxMilestones).map((m, i) => ({
+    id: `m${i + 1}`,
+    order: i + 1,
+    title: String(m?.title ?? "").slice(0, 200),
+    description: String(m?.description ?? ""),
+    category: CATEGORIES.includes(m?.category) ? m.category : "other",
+    ...judged(m),
+  }));
+  if (!results.length) throw new MilestoneCheckError("Claude returned no milestones", 502);
+  return {
+    ...envelope(ctx, model, parsed.overall_summary, results),
+    project_type: PROJECT_TYPES.includes(parsed.project_type as any) ? parsed.project_type : "mixed",
     milestones: results,
   };
 }

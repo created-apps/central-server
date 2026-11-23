@@ -3,7 +3,16 @@
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
 import { useIsAdmin } from "@/components/AuthProvider";
-import { AssessmentDialog, MeetingDialog, MentorDialog, ProjectSetupDialog, SrmDialog } from "@/components/groups/ActionDialogs";
+import {
+  AssessmentDialog,
+  MeetingDialog,
+  MentorDialog,
+  PocOwnerDialog,
+  ProgrammeDialog,
+  ProjectSetupDialog,
+  ResearchMentorDialog,
+  SrmDialog,
+} from "@/components/groups/ActionDialogs";
 import { StageBadge, StopOperationsButton, StoppedBadge, StoppedNotice } from "@/components/groups/shared";
 import { Badge, Button, CopyButton, Dialog, Field, inputClass, toast } from "@/components/ui";
 import { fmtDate } from "@/lib/milestones";
@@ -15,6 +24,7 @@ import {
   useCase,
   useCaseActions,
   useMentors,
+  usePocOwners,
   useQueue,
   type CaseAction,
   type GroupCase,
@@ -22,16 +32,61 @@ import {
   type QueuedAction,
 } from "@/lib/ops";
 
-type ActionId = "cs" | "prototyping" | "meeting" | "mentor" | "srm" | "setup" | null;
+type ActionId = "programme" | "poc" | "cs" | "prototyping" | "meeting" | "mentor" | "research" | "srm" | "setup" | null;
 
-const ACTIONS: { id: Exclude<ActionId, null>; label: string; description: string }[] = [
-  { id: "cs", label: "CS assessment", description: "Send the Computer Science task" },
-  { id: "prototyping", label: "Prototyping", description: "Send the Prototyping task" },
-  { id: "meeting", label: "Booking link", description: "Send a call scheduling link" },
-  { id: "mentor", label: "Introduce mentor", description: "Assign and introduce a mentor" },
-  { id: "srm", label: "Introduce SRM", description: "Introduce the family's SRM" },
-  { id: "setup", label: "Project setup", description: "Queue the Stage 5 automation" },
-];
+interface ActionDef {
+  id: Exclude<ActionId, null>;
+  label: string;
+  description: string;
+  /** Why it can't be used yet, shown in place of the description. */
+  blocked: string | null;
+  highlight?: boolean;
+}
+
+/**
+ * The actions a group offers, mirroring the operations dashboard:
+ * - the programme comes first and every other action waits on it;
+ * - the POC owner needs the family in the group, and is set once;
+ * - CMP groups have no regular mentor or project setup;
+ * - RBP groups add a research mentor once the regular mentor is introduced.
+ */
+function actionsFor(c: GroupCase): ActionDef[] {
+  const needsProgramme = c.program_code ? null : "Choose the programme first";
+  const list: ActionDef[] = [
+    {
+      id: "programme",
+      label: c.program_code ? `Programme: ${c.program_code}` : "Choose programme",
+      description: c.poc_owner_id ? "Locked after the POC owner assignment" : "Set PPP, RBP or CMP",
+      blocked: c.poc_owner_id ? "Locked: the POC owner is assigned" : null,
+      highlight: !c.program_code,
+    },
+    {
+      id: "poc",
+      label: c.poc_owner_id ? "POC owner assigned" : "Assign POC owner",
+      description: "Aashna, Dhruv or Urja; first entry wins",
+      blocked:
+        needsProgramme ??
+        (c.stage === "AWAITING_JOIN" ? "Waits until the family joins and is welcomed" : null) ??
+        (c.poc_owner_id ? "Already assigned, permanently" : null),
+    },
+    { id: "cs", label: "CS assessment", description: "Send the Computer Science task", blocked: needsProgramme },
+    { id: "prototyping", label: "Prototyping", description: "Send the Prototyping task", blocked: needsProgramme },
+    { id: "meeting", label: "Booking link", description: "Send a call scheduling link", blocked: needsProgramme },
+    { id: "mentor", label: "Introduce mentor", description: "Assign and introduce a mentor", blocked: needsProgramme },
+    { id: "srm", label: "Introduce SRM", description: "Introduce the family's SRM", blocked: needsProgramme },
+    { id: "setup", label: "Project setup", description: "Queue the Stage 5 automation", blocked: needsProgramme },
+  ];
+  if (c.program_code === "RBP") {
+    list.push({
+      id: "research",
+      label: c.research_mentor_name ? "Replace research mentor" : "Assign research mentor",
+      description: c.research_mentor_name ? `Currently ${c.research_mentor_name}` : "Introduce, and make them the COSMIC project mentor",
+      blocked: c.mentor_intro_sent_at ? null : "Introduce the regular mentor first",
+    });
+  }
+  // CMP uses its POC competition project, not the regular mentor flow.
+  return c.program_code === "CMP" ? list.filter((a) => a.id !== "mentor" && a.id !== "setup") : list;
+}
 
 const Card = ({ title, right, children }: { title: React.ReactNode; right?: React.ReactNode; children: React.ReactNode }) => (
   <section className="rounded-3xl bg-card p-5 shadow-[0_1px_2px_rgba(16,24,20,0.04)]">
@@ -55,24 +110,32 @@ function ActionsPanel({ groupCase, onDone }: { groupCase: GroupCase; onDone: () 
   return (
     <Card title="Actions" right={stopped ? <StoppedBadge /> : !isAdmin ? <Badge className="bg-soft text-muted">Read-only</Badge> : null}>
       <div className="grid gap-2 sm:grid-cols-2">
-        {ACTIONS.map((a) => (
-          <button
-            key={a.id}
-            onClick={() => setActive(a.id)}
-            disabled={!canSend}
-            title={canSend ? undefined : stopped ? "Operations are stopped for this project" : "Read-only access — ask an admin to send this"}
-            className="rounded-2xl border border-line p-3.5 text-left hover:border-accent/50 hover:bg-accent-soft/50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
-          >
-            <p className="text-sm font-medium">{a.label}</p>
-            <p className="text-xs text-muted">{a.description}</p>
-          </button>
-        ))}
+        {actionsFor(groupCase).map((a) => {
+          const reason = !canSend ? (stopped ? "Operations are stopped for this project" : "Read-only access — ask an admin to send this") : a.blocked;
+          return (
+            <button
+              key={a.id}
+              onClick={() => setActive(a.id)}
+              disabled={Boolean(reason)}
+              title={reason ?? undefined}
+              className={`rounded-2xl border p-3.5 text-left hover:border-accent/50 hover:bg-accent-soft/50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-line disabled:hover:bg-transparent ${
+                a.highlight && !reason ? "border-accent bg-accent-soft" : "border-line"
+              }`}
+            >
+              <p className="text-sm font-medium">{a.label}</p>
+              <p className="text-xs text-muted">{canSend && a.blocked ? a.blocked : a.description}</p>
+            </button>
+          );
+        })}
       </div>
       <p className="mt-3 text-xs text-muted">Every action sends a WhatsApp message to the group. Check the preview before confirming: messages cannot be unsent.</p>
+      <ProgrammeDialog open={active === "programme"} {...props} />
+      <PocOwnerDialog open={active === "poc"} {...props} />
       <AssessmentDialog kind="CS" open={active === "cs"} {...props} />
       <AssessmentDialog kind="PROTOTYPING" open={active === "prototyping"} {...props} />
       <MeetingDialog open={active === "meeting"} {...props} />
       <MentorDialog mentors={mentors ?? []} open={active === "mentor"} {...props} />
+      <ResearchMentorDialog mentors={mentors ?? []} open={active === "research"} {...props} />
       <SrmDialog open={active === "srm"} {...props} />
       <ProjectSetupDialog open={active === "setup"} {...props} />
     </Card>
@@ -322,6 +385,7 @@ function Contacts({ groupCase, onDone }: { groupCase: GroupCase; onDone: () => v
 export default function GroupPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { data: groupCase, error, isLoading, mutate } = useCase(id);
+  const { data: pocOwners } = usePocOwners();
   const { data: actions, isLoading: actionsLoading, mutate: mutateActions } = useCaseActions(id);
   const [version, setVersion] = useState(0);
   const refresh = () => {
@@ -341,7 +405,9 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
     );
   }
 
+  const pocOwner = pocOwners?.find((o) => o.id === groupCase.poc_owner_id);
   const meta = [
+    ["Programme", groupCase.program_code],
     ["Project", groupCase.project_name],
     ["Source", groupCase.source],
     ["Sheet row", groupCase.sheet_row ? `Row ${groupCase.sheet_row}` : null],
@@ -392,6 +458,16 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                 ["Created", fmtDate(groupCase.created_at)],
                 ["Last updated", relativeTime(groupCase.updated_at)],
                 ["Mentor intro", groupCase.mentor_intro_sent_at ? fmtDate(groupCase.mentor_intro_sent_at) : "Not sent"],
+                ["POC owner", pocOwner?.name ?? (groupCase.poc_owner_id ? "Assigned" : "Not assigned")],
+                ...(groupCase.program_code === "RBP"
+                  ? [
+                      [
+                        "Research mentor",
+                        groupCase.research_mentor_name ??
+                          (groupCase.pending_research_mentor_name ? `${groupCase.pending_research_mentor_name} (not joined yet)` : "Not assigned"),
+                      ],
+                    ]
+                  : []),
                 ["First class", groupCase.first_class_confirmed_at ? fmtDate(groupCase.first_class_confirmed_at) : "Not confirmed"],
                 ["Nudges", groupCase.nudge_count > 0 ? `${groupCase.nudge_count} · last ${relativeTime(groupCase.last_nudged_at)}` : "None"],
               ].map(([k, v]) => (

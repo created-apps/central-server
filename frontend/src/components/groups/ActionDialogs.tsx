@@ -11,14 +11,17 @@ import { useEffect, useMemo, useState } from "react";
 import { Badge, Button, Dialog, Field, inputClass, toast } from "@/components/ui";
 import {
   MEETING_HOSTS,
+  PROGRAM_CODES,
   SRMS,
   ops,
   toLocalDate,
   useCurriculumSubjects,
   useMessagePreview,
+  usePocOwners,
   useProjectSetup,
   type GroupCase,
   type Mentor,
+  type ProgramCode,
   type SetupStepStatus,
 } from "@/lib/ops";
 import { Preview, WhatsappPreview } from "./shared";
@@ -391,12 +394,12 @@ export function ProjectSetupDialog({ groupCase, open, onClose, onDone }: Props) 
   const submitted = Boolean(setup?.submitted_at);
 
   const save = async () => {
-    if (!title.trim()) return;
+    if (!title.trim() || !description.trim()) return;
     setPending(true);
     try {
       await ops.saveProjectSetup(groupCase.id, {
         project_title: title.trim(),
-        project_description: description.trim() || undefined,
+        project_description: description.trim(),
         curriculum_subject: subject,
       });
       toast.success("Project setup saved", {
@@ -426,7 +429,7 @@ export function ProjectSetupDialog({ groupCase, open, onClose, onDone }: Props) 
           <Button onClick={onClose} disabled={pending}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={save} disabled={pending || !title.trim()}>
+          <Button variant="primary" onClick={save} disabled={pending || !title.trim() || !description.trim()}>
             {pending ? "Saving…" : submitted ? "Update project setup" : "Save & queue setup"}
           </Button>
         </>
@@ -441,7 +444,7 @@ export function ProjectSetupDialog({ groupCase, open, onClose, onDone }: Props) 
       <Field label="Project title" hint="Becomes the WhatsApp group title (when it's still the default) and the student's Drive folder name.">
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Wildfire early-warning model" className={inputClass} />
       </Field>
-      <Field label="Project description" hint="Shown as the WhatsApp group description.">
+      <Field label="Project description (required)" hint="Shown as the WhatsApp group description, and needed before the COSMIC project is created.">
         <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} className={inputClass} />
       </Field>
       <Field label="Curriculum" hint="The matching curriculum templates are copied into the student's Drive folder. Choose None to skip.">
@@ -473,6 +476,188 @@ export function ProjectSetupDialog({ groupCase, open, onClose, onDone }: Props) 
           )}
         </div>
       )}
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------- Programme
+
+/** Chosen before anything else; copied to COSMIC as program_enrolled. */
+export function ProgrammeDialog({ groupCase, open, onClose, onDone }: Props) {
+  const [value, setValue] = useState<ProgramCode | "">("");
+  const [pending, setPending] = useState(false);
+  useEffect(() => {
+    if (open) setValue(groupCase.program_code ?? "");
+  }, [open, groupCase.program_code]);
+
+  const save = async () => {
+    if (!value) return;
+    setPending(true);
+    try {
+      await ops.setProgramme(groupCase.id, value);
+      toast.success(`Programme set to ${value}`);
+      onClose();
+      onDone();
+    } catch (err) {
+      toast.error(errMessage(err, "Could not save the programme."));
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title="Programme"
+      description="Choose the programme before any other action or setup can go ahead. It locks once a POC owner is assigned."
+      footer={
+        <>
+          <Button onClick={onClose} disabled={pending}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={save} disabled={!value || pending}>
+            {pending ? "Saving…" : "Save programme"}
+          </Button>
+        </>
+      }
+    >
+      <Field label="Programme code" hint="Saved in Assessment Automations and copied to COSMIC as program_enrolled.">
+        <select value={value} onChange={(e) => setValue(e.target.value as ProgramCode)} className={inputClass}>
+          <option value="">Select PPP, RBP or CMP</option>
+          {PROGRAM_CODES.map((c) => (
+            <option key={c}>{c}</option>
+          ))}
+        </select>
+      </Field>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------- POC owner
+
+/** The permanent POC owner. First answer wins, here or from the emailed links. */
+export function PocOwnerDialog({ groupCase, open, onClose, onDone }: Props) {
+  const { data: owners } = usePocOwners();
+  const [ownerId, setOwnerId] = useState("");
+  const [pending, setPending] = useState(false);
+  useEffect(() => {
+    if (open) setOwnerId("");
+  }, [open]);
+
+  const assign = async () => {
+    if (!ownerId) return;
+    setPending(true);
+    try {
+      const result = await ops.assignPocOwner(groupCase.id, ownerId);
+      toast.success(`${result.owner.name} assigned as POC owner`, {
+        description: "This is final. The early COSMIC student and POC project setup will now run.",
+      });
+      onClose();
+      onDone();
+    } catch (err) {
+      toast.error(errMessage(err, "Could not assign the POC owner."));
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title="Who is the POC owner?"
+      description="The dashboard and the emailed links share one first-entry-wins assignment. It can't be changed afterwards, and it locks the programme."
+      footer={
+        <>
+          <Button onClick={onClose} disabled={pending}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={assign} disabled={!ownerId || pending}>
+            {pending ? "Assigning…" : "Assign permanently"}
+          </Button>
+        </>
+      }
+    >
+      <Field label="POC owner" hint="They get Drive access, but are not added to the WhatsApp group or SYNC membership.">
+        <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)} className={inputClass}>
+          <option value="">{owners ? "Select Aashna, Dhruv or Urja" : "Loading…"}</option>
+          {(owners ?? []).map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.name}
+            </option>
+          ))}
+        </select>
+      </Field>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------- Research mentor
+
+/** RBP only: a research mentor alongside the regular one. */
+export function ResearchMentorDialog({ groupCase, mentors, open, onClose, onDone }: Props & { mentors: Mentor[] }) {
+  const [name, setName] = useState("");
+  const [pending, setPending] = useState(false);
+  useEffect(() => {
+    if (open) setName("");
+  }, [open]);
+  const replacing = Boolean(groupCase.research_mentor_name);
+
+  const assign = async () => {
+    if (!name) return;
+    setPending(true);
+    try {
+      const result = await ops.assignResearchMentor(groupCase.id, name);
+      toast.success(result.held ? "Research mentor assigned, introduction held" : "Research mentor introduced", {
+        description: [
+          result.held
+            ? "The introduction goes out when the research mentor joins the group."
+            : "Drive access and the COSMIC mentor replacement will run automatically.",
+          ...(result.warnings ?? []),
+        ].join(" "),
+      });
+      onClose();
+      onDone();
+    } catch (err) {
+      toast.error(errMessage(err, "Could not assign the research mentor."));
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title={replacing ? "Replace research mentor" : "Assign research mentor"}
+      description={
+        replacing
+          ? `${groupCase.research_mentor_name} is the current research mentor. Replacing them removes their research membership; the regular mentor stays.`
+          : "The regular mentor stays. The research mentor is added alongside them."
+      }
+      footer={
+        <>
+          <Button onClick={onClose} disabled={pending}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={assign} disabled={!name || pending}>
+            {pending ? "Assigning…" : replacing ? "Replace research mentor" : "Assign research mentor"}
+          </Button>
+        </>
+      }
+    >
+      <Field
+        label="Research mentor"
+        hint="They are invited, introduced once they join, added to SYNC, given Drive access, and become the COSMIC project mentor."
+      >
+        <select value={name} onChange={(e) => setName(e.target.value)} className={inputClass}>
+          <option value="">Select a mentor</option>
+          {mentors.map((m) => (
+            <option key={m.name}>{m.name}</option>
+          ))}
+        </select>
+      </Field>
     </Dialog>
   );
 }

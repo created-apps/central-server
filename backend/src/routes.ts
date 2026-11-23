@@ -6,7 +6,14 @@ import { requireAdmin, requireApiKeyOrStaff, requireStaff, type AuthedRequest } 
 import { getScopeDownloadUrl } from "./sources/cosmic.js";
 import { DriveExportError, exportReportPdf, pdfFilename } from "./sources/drive.js";
 import { runSync, syncInProgress } from "./syncJob.js";
-import { checkMilestones, MilestoneCheckError, parseCheckRequest } from "./milestoneCheck.js";
+import {
+  checkMilestones,
+  deriveMilestones,
+  MilestoneCheckError,
+  parseCheckRequest,
+  parseDeriveRequest,
+} from "./milestoneCheck.js";
+import { parseFormFields, sendReportPdf } from "./reportPdf.js";
 
 export const api = Router();
 /**
@@ -24,6 +31,29 @@ api.post("/milestones/evaluate", requireApiKeyOrStaff, async (req, res, next) =>
     next(err);
   }
 });
+
+/**
+ * Derived milestones: Claude decides the project's milestones from the child's
+ * scope (hardware builds get soldering and assembly, ML projects data
+ * collection and model training, ...) and marks each done or not from the
+ * progress reports. JSON or form-data: student_email, max_milestones (optional).
+ */
+api.post("/milestones/derive", requireApiKeyOrStaff, parseFormFields, async (req, res, next) => {
+  try {
+    res.json(await deriveMilestones(parseDeriveRequest(req.body)));
+  } catch (err) {
+    if (err instanceof MilestoneCheckError) return res.status(err.status).json({ error: err.message });
+    if (err instanceof Anthropic.APIError) return res.status(502).json({ error: `Claude API error ${err.status}` });
+    next(err);
+  }
+});
+
+/**
+ * A child's progress report as a PDF, by student email. multipart/form-data:
+ * student_email, and report_no (optional, the latest when left out). Takes the
+ * X-API-Key header like the milestone check.
+ */
+api.post("/progress-reports/pdf", requireApiKeyOrStaff, parseFormFields, sendReportPdf);
 
 api.use(requireStaff);
 
