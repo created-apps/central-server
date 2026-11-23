@@ -22,12 +22,21 @@ export interface GroupCase {
   parent_phone: string | null;
   parent_email: string | null;
   project_name: string | null;
+  /** Chosen first; every other action waits on it. Locked once a POC owner is set. */
+  program_code: ProgramCode | null;
+  /** Permanent once set (first answer wins). */
+  poc_owner_id: string | null;
   source: string | null;
   sheet_row: number | null;
   invite_link: string | null;
   stage: Stage;
   mentor_name: string | null;
   mentor_intro_sent_at: string | null;
+  /** RBP only: a second mentor who becomes the COSMIC project mentor. */
+  research_mentor_name: string | null;
+  research_mentor_intro_sent_at: string | null;
+  pending_research_mentor_name: string | null;
+  pending_research_mentor_since: string | null;
   pending_mentor_name: string | null;
   pending_mentor_since: string | null;
   mentor_joined_at: string | null;
@@ -57,6 +66,15 @@ export interface CaseAction {
   created_at: string;
 }
 
+export type ProgramCode = "PPP" | "RBP" | "CMP";
+export const PROGRAM_CODES: ProgramCode[] = ["PPP", "RBP", "CMP"];
+
+export interface PocOwner {
+  id: string;
+  name: string;
+  email: string | null;
+}
+
 export interface Mentor {
   name: string;
   intro: string;
@@ -83,6 +101,14 @@ export interface ProjectSetup {
   step_cosmic_project: SetupStepStatus;
   step_cosmic_sync_group: SetupStepStatus;
   drive_folder_url: string | null;
+  poc_status: ProjectSetup["status"];
+  step_poc_drive: SetupStepStatus;
+  step_poc_drive_access: SetupStepStatus;
+  step_cosmic_poc_project: SetupStepStatus;
+  cosmic_poc_project_id: string | null;
+  research_status: ProjectSetup["status"];
+  step_research_drive_access: SetupStepStatus;
+  step_cosmic_research_mentor: SetupStepStatus;
   last_error: string | null;
 }
 
@@ -192,7 +218,7 @@ export const ops = {
   cancelQueued: (caseId: string, queuedId: string) =>
     request<void>(`/api/cases/${enc(caseId)}/queue/${enc(queuedId)}`, { method: "DELETE" }),
   preview: (caseId: string, body: ActionBody) => request<{ message: string }>(`/api/cases/${enc(caseId)}/preview`, post(body)),
-  saveProjectSetup: (caseId: string, body: { project_title: string; project_description?: string; curriculum_subject?: string }) =>
+  saveProjectSetup: (caseId: string, body: { project_title: string; project_description: string; curriculum_subject?: string }) =>
     request<ProjectSetup>(`/api/cases/${enc(caseId)}/project-setup`, post(body)),
   changePhone: (caseId: string, role: "student" | "parent", phone: string) =>
     request<PhoneChangeResult>(`/api/cases/${enc(caseId)}/phone`, { method: "PATCH", body: JSON.stringify({ role, phone }) }),
@@ -200,6 +226,15 @@ export const ops = {
     request<{ case: GroupCase; cancelled: number; already_stopped: boolean }>(
       `/api/cases/${enc(caseId)}/stop`,
       post(reason ? { reason } : {}),
+    ),
+  setProgramme: (caseId: string, programCode: ProgramCode) =>
+    request<GroupCase>(`/api/cases/${enc(caseId)}/programme`, { method: "PUT", body: JSON.stringify({ program_code: programCode }) }),
+  assignPocOwner: (caseId: string, pocOwnerId: string) =>
+    request<{ case: GroupCase; owner: PocOwner; assigned: boolean }>(`/api/cases/${enc(caseId)}/poc-owner`, post({ poc_owner_id: pocOwnerId })),
+  assignResearchMentor: (caseId: string, mentor: string, variant?: string) =>
+    request<{ case: GroupCase; held: boolean; warnings: string[] }>(
+      `/api/cases/${enc(caseId)}/research-mentor`,
+      post({ mentor, ...(variant ? { variant } : {}) }),
     ),
   createMentor: (body: { name: string; intro: string; email?: string; phone: string; variants?: Record<string, string> }) =>
     request<Mentor>("/api/mentors", post(body)),
@@ -225,6 +260,7 @@ export const useCase = (id: string) =>
 export const useCaseActions = (id: string) => useSWR(["case-actions", id], () => request<CaseAction[]>(`/api/cases/${enc(id)}/actions`));
 export const useQueue = (id: string) => useSWR(["queue", id], () => request<QueuedAction[]>(`/api/cases/${enc(id)}/queue`));
 export const useMentors = () => useSWR("mentors", () => request<Mentor[]>("/api/mentors"));
+export const usePocOwners = () => useSWR("poc-owners", () => request<PocOwner[]>("/api/poc-owners"));
 export const useProjectSetup = (id: string | null) =>
   useSWR(id ? ["project-setup", id] : null, () => request<ProjectSetup | null>(`/api/cases/${enc(id as string)}/project-setup`));
 export const useCurriculumSubjects = () =>

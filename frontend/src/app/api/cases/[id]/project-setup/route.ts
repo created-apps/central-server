@@ -19,7 +19,8 @@ export async function GET(_req: Request, { params }: Ctx) {
 
 const schema = z.object({
   project_title: z.string().trim().min(1),
-  project_description: z.string().trim().max(4000).optional(),
+  // Required: COSMIC project creation needs it.
+  project_description: z.string().trim().min(1).max(4000),
   curriculum_subject: z.string().trim().max(200).optional(),
 });
 
