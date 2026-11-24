@@ -23,10 +23,23 @@ export function parseFormFields(req: Request, res: Response, next: NextFunction)
   });
 }
 
-interface ReportRow {
+export interface ReportRow {
   doc_id: string;
   report_no: number | null;
   report_date: string | null;
+  sessions_completed: number | null;
+}
+
+/** A child's progress reports, oldest first: the last one is "the latest". */
+export async function listReports(studentId: string): Promise<ReportRow[]> {
+  const { data, error } = await db
+    .from("progress_reports")
+    .select("doc_id,report_no,report_date,sessions_completed")
+    .eq("student_id", studentId)
+    .order("report_no", { ascending: true, nullsFirst: true })
+    .order("report_date", { ascending: true, nullsFirst: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as ReportRow[];
 }
 
 export async function sendReportPdf(req: Request, res: Response, next: NextFunction) {
@@ -50,14 +63,7 @@ export async function sendReportPdf(req: Request, res: Response, next: NextFunct
     const student = await findStudentByEmail<{ id: string }>(email, "id");
     if (!student) return res.status(404).json({ error: "Student not found" });
 
-    const { data, error } = await db
-      .from("progress_reports")
-      .select("doc_id,report_no,report_date")
-      .eq("student_id", student.id)
-      .order("report_no", { ascending: true, nullsFirst: true })
-      .order("report_date", { ascending: true, nullsFirst: true });
-    if (error) throw new Error(error.message);
-    const reports = (data ?? []) as ReportRow[];
+    const reports = await listReports(student.id);
     if (!reports.length) return res.status(404).json({ error: "This student has no progress reports" });
 
     const report = reportNo === null ? reports.at(-1)! : reports.find((r) => r.report_no === reportNo);
