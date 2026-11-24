@@ -138,6 +138,7 @@ export const MEETING_HOSTS = [
   "Aashna Saraf",
   "Urja Jhaveri",
   "Dhruv Singh",
+  "Dhruv + Urja",
   "Dhruv + Aashna",
   "Urja + Aashna",
   "Dhruv + Omm",
