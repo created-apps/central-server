@@ -14,6 +14,7 @@ import {
   parseDeriveRequest,
 } from "./milestoneCheck.js";
 import { parseFormFields, sendReportPdf } from "./reportPdf.js";
+import { sendTimeline } from "./timeline.js";
 
 export const api = Router();
 /**
@@ -54,6 +55,13 @@ api.post("/milestones/derive", requireApiKeyOrStaff, parseFormFields, async (req
  * X-API-Key header like the milestone check.
  */
 api.post("/progress-reports/pdf", requireApiKeyOrStaff, parseFormFields, sendReportPdf);
+
+/**
+ * A child's timeline (as on their dashboard page) plus their latest progress
+ * report. Request: form-data or JSON with student_email. Response:
+ * multipart/form-data with a "timeline" JSON part and a "progress_report" PDF.
+ */
+api.post("/students/timeline", requireApiKeyOrStaff, parseFormFields, sendTimeline);
 
 api.use(requireStaff);
 
