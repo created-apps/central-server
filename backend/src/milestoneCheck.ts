@@ -3,6 +3,7 @@
  * decides which are done, using the child's approved project scope and the
  * text of their progress reports (exported from Google Docs) as evidence.
  */
+import { createHash } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { config } from "./config.js";
 import { db } from "./db.js";
@@ -286,9 +287,23 @@ const MAX_DERIVED = 15;
 export interface DeriveRequest {
   studentEmail: string;
   maxMilestones: number;
+  regenerate: boolean;
 }
 
-/** Validates the body: student_email, and max_milestones (3-15, default 8). */
+/** true / "true" / "1" / "yes" (form-data sends strings). */
+function flag(value: unknown): boolean {
+  if (value === undefined || value === null || value === "" || value === false) return false;
+  if (value === true) return true;
+  const v = String(value).trim().toLowerCase();
+  if (["true", "1", "yes"].includes(v)) return true;
+  if (["false", "0", "no"].includes(v)) return false;
+  throw new MilestoneCheckError("regenerate must be true or false");
+}
+
+/**
+ * Validates the body: student_email, max_milestones (3-15, default 8; only
+ * used when a new plan is decided) and regenerate (replace the saved plan).
+ */
 export function parseDeriveRequest(body: unknown): DeriveRequest {
   const b = (body ?? {}) as Record<string, unknown>;
   const email = normaliseEmail(b.student_email);
@@ -301,7 +316,7 @@ export function parseDeriveRequest(body: unknown): DeriveRequest {
       throw new MilestoneCheckError(`max_milestones must be a whole number from ${MIN_DERIVED} to ${MAX_DERIVED}`);
     }
   }
-  return { studentEmail: email, maxMilestones: max };
+  return { studentEmail: email, maxMilestones: max, regenerate: flag(b.regenerate) };
 }
 
 const DERIVE_SYSTEM = `You plan and track the milestones of a school student's project in \
@@ -368,8 +383,113 @@ const DERIVE_SCHEMA = {
   additionalProperties: false,
 } as const;
 
+// ---------------------------------------------------------------------------
+// Saved plans: the first derive for a child saves the milestone names; later
+// derives reuse them and only re-judge progress, so the names stay put.
+// ---------------------------------------------------------------------------
+
+interface PlanMilestone {
+  id: string;
+  order: number;
+  title: string;
+  description: string;
+  category: string;
+}
+
+interface SavedPlan {
+  student_id: string;
+  project_type: string;
+  milestones: PlanMilestone[];
+  scope_hash: string | null;
+  model: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+const PLAN_FIELDS = "student_id,project_type,milestones,scope_hash,model,created_at,updated_at";
+
+/** A missing table is a setup step, not a server fault: say which file to run. */
+function planError(err: { code?: string; message?: string }): never {
+  if (err.code === "PGRST205" || err.code === "42P01" || /milestone_plans/.test(err.message ?? "")) {
+    throw new MilestoneCheckError(
+      "The milestone_plans table does not exist yet. Run supabase/schema.sql in the tracker's Supabase SQL editor.",
+      503,
+    );
+  }
+  throw new Error(`milestone_plans: ${err.message}`);
+}
+
+async function loadPlan(studentId: string): Promise<SavedPlan | null> {
+  const { data, error } = await db.from("milestone_plans").select(PLAN_FIELDS).eq("student_id", studentId).maybeSingle();
+  if (error) planError(error);
+  return (data as SavedPlan | null) ?? null;
+}
+
+/**
+ * Saves a new plan. Without overwrite, an existing plan wins (two first calls
+ * racing): null comes back and the caller uses the saved one.
+ */
+async function savePlan(row: Omit<SavedPlan, "created_at" | "updated_at">, overwrite: boolean): Promise<SavedPlan | null> {
+  const now = new Date().toISOString();
+  const query = overwrite
+    ? db.from("milestone_plans").upsert({ ...row, created_at: now, updated_at: now }, { onConflict: "student_id" })
+    : db.from("milestone_plans").upsert({ ...row, created_at: now, updated_at: now }, { onConflict: "student_id", ignoreDuplicates: true });
+  const { data, error } = await query.select(PLAN_FIELDS);
+  if (error) planError(error);
+  return ((data ?? [])[0] as SavedPlan | undefined) ?? null;
+}
+
+function scopeHash(student: Record<string, any>): string {
+  const scope = JSON.stringify([student.scope_title ?? "", student.scope_summary ?? "", student.scope_json ?? null]);
+  return createHash("sha256").update(scope).digest("hex");
+}
+
+function planInfo(plan: SavedPlan, source: "new" | "saved" | "regenerated", currentHash: string) {
+  return {
+    source,
+    created_at: plan.created_at,
+    updated_at: plan.updated_at,
+    // The scope changed after these milestones were decided. They are kept;
+    // pass regenerate=true to decide them again.
+    scope_changed: Boolean(plan.scope_hash && plan.scope_hash !== currentHash),
+  };
+}
+
+/** Re-judges the saved milestones against the reports, names untouched. */
+async function judgeSaved(ctx: Awaited<ReturnType<typeof loadContext>>, plan: SavedPlan, source: "saved", hash: string) {
+  const inputs: MilestoneInput[] = plan.milestones.map((m) => ({ id: m.id, title: m.title, description: m.description || null }));
+  const { parsed, model } = await askClaude<{ milestones: any[]; overall_summary: string }>(
+    SYSTEM,
+    RESULT_SCHEMA,
+    buildPrompt(ctx.student, ctx.reports, inputs),
+  );
+  const byId = new Map((parsed.milestones ?? []).map((m) => [String(m.id), m]));
+  const results = plan.milestones.map((m) => ({
+    id: m.id,
+    order: m.order,
+    title: m.title,
+    description: m.description,
+    category: m.category,
+    ...judged(byId.get(m.id)),
+  }));
+  return {
+    ...envelope(ctx, model, parsed.overall_summary, results),
+    project_type: plan.project_type,
+    plan: planInfo(plan, source, hash),
+    milestones: results,
+  };
+}
+
 export async function deriveMilestones(req: DeriveRequest) {
   const ctx = await loadContext(req.studentEmail);
+  const hash = scopeHash(ctx.student);
+
+  // A saved plan: keep its names, re-judge progress only.
+  if (!req.regenerate) {
+    const saved = await loadPlan(ctx.student.id);
+    if (saved) return judgeSaved(ctx, saved, "saved", hash);
+  }
+
   if (!ctx.hasScope) throw new MilestoneCheckError("This student has no project scope to decide milestones from", 422);
   const prompt = [
     ...contextLines(ctx.student, ctx.reports),
@@ -390,9 +510,29 @@ export async function deriveMilestones(req: DeriveRequest) {
     ...judged(m),
   }));
   if (!results.length) throw new MilestoneCheckError("Claude returned no milestones", 502);
+  const projectType = PROJECT_TYPES.includes(parsed.project_type as any) ? parsed.project_type : "mixed";
+
+  const plan = await savePlan(
+    {
+      student_id: ctx.student.id,
+      project_type: projectType,
+      milestones: results.map(({ id, order, title, description, category }) => ({ id, order, title, description, category })),
+      scope_hash: hash,
+      model,
+    },
+    req.regenerate,
+  );
+  if (!plan) {
+    // Another call saved a plan first: use that one so every caller sees the same names.
+    const winner = await loadPlan(ctx.student.id);
+    if (winner) return judgeSaved(ctx, winner, "saved", hash);
+    throw new Error("milestone_plans: plan was neither saved nor found");
+  }
+
   return {
     ...envelope(ctx, model, parsed.overall_summary, results),
-    project_type: PROJECT_TYPES.includes(parsed.project_type as any) ? parsed.project_type : "mixed",
+    project_type: projectType,
+    plan: planInfo(plan, req.regenerate ? "regenerated" : "new", hash),
     milestones: results,
   };
 }
