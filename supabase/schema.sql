@@ -159,3 +159,20 @@ create table if not exists competitions (
 
 create index if not exists competitions_student_idx on competitions (student_id);
 alter table competitions enable row level security;
+
+-- The milestones /api/milestones/derive decided for a child, saved on the
+-- first call so later calls keep the same names and only re-judge progress.
+-- Replaced only when a caller passes regenerate=true.
+create table if not exists milestone_plans (
+  student_id    uuid primary key references students (id) on delete cascade,
+  project_type  text not null,
+  -- [{ id, order, title, description, category }], in order.
+  milestones    jsonb not null,
+  -- sha256 of the scope the plan was decided from, to flag a later scope change.
+  scope_hash    text,
+  model         text,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
+alter table milestone_plans enable row level security;
