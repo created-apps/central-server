@@ -177,3 +177,8 @@ export async function getClosureRecord(projectId: string) {
 export async function getScopeDownloadUrl(path: string, bucket: string, ttl: number) {
   return cosmicSource.signedUrl(bucket, path, ttl);
 }
+
+/** The scope document's bytes, from COSMIC's private bucket (read-only). */
+export async function downloadScopeFile(path: string, bucket: string, maxBytes: number) {
+  return cosmicSource.download(bucket, path, maxBytes);
+}

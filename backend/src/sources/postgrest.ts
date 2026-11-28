@@ -81,6 +81,27 @@ export class ReadOnlySource {
       return null;
     }
   }
+
+  /**
+   * A private storage object's bytes, read with the service key. null when
+   * the object is missing; throws when storage fails or the file is too big.
+   */
+  async download(bucket: string, path: string, maxBytes: number): Promise<{ body: Buffer; contentType: string | null } | null> {
+    if (!this.enabled || !path) return null;
+    const base = this.url.replace(/\/$/, "");
+    const objectPath = path.split("/").map(encodeURIComponent).join("/");
+    const res = await fetch(`${base}/storage/v1/object/authenticated/${encodeURIComponent(bucket)}/${objectPath}`, {
+      headers: this.headers(),
+      signal: AbortSignal.timeout(60_000),
+    });
+    if (res.status === 404 || res.status === 400) return null;
+    if (!res.ok) throw new Error(`[${this.name}] storage returned ${res.status}`);
+    const declared = Number(res.headers.get("content-length") ?? 0);
+    if (declared > maxBytes) throw new Error(`[${this.name}] file is too large`);
+    const body = Buffer.from(await res.arrayBuffer());
+    if (body.length > maxBytes) throw new Error(`[${this.name}] file is too large`);
+    return { body, contentType: res.headers.get("content-type") };
+  }
 }
 
 /** PostgREST filter for a case-insensitive exact email match. */
