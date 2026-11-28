@@ -15,6 +15,7 @@ import {
 } from "./milestoneCheck.js";
 import { parseFormFields, sendReportPdf } from "./reportPdf.js";
 import { sendTimeline } from "./timeline.js";
+import { sendScopeFile } from "./scopeFile.js";
 
 export const api = Router();
 /**
@@ -62,6 +63,12 @@ api.post("/progress-reports/pdf", requireApiKeyOrStaff, parseFormFields, sendRep
  * multipart/form-data with a "timeline" JSON part and a "progress_report" PDF.
  */
 api.post("/students/timeline", requireApiKeyOrStaff, parseFormFields, sendTimeline);
+
+/**
+ * A child's scope document (PDF or .docx, as COSMIC stores it), by student
+ * email. multipart/form-data: student_email. Takes the X-API-Key header.
+ */
+api.post("/scope/file", requireApiKeyOrStaff, parseFormFields, sendScopeFile);
 
 api.use(requireStaff);
 
